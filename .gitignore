@@ -218,3 +218,4 @@ __marimo__/
 
 # Runtime (mcpo bg)
 .run/
+.github/
