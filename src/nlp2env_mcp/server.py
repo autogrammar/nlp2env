@@ -14,7 +14,6 @@ from nlp2env.crypto import (
     encrypt_value,
     generate_key,
     mask_encrypted,
-    rotate_encrypted_values,
 )
 from nlp2env.profiles import (
     API_PROFILE_KEYS,
@@ -40,6 +39,34 @@ def _ok(payload: dict[str, Any]) -> str:
 
 def _err(message: str, **extra: Any) -> str:
     return json.dumps({"success": False, "error": message, **extra}, ensure_ascii=False, indent=2)
+
+
+def _capability_enabled(variable: str) -> bool:
+    return os.getenv(variable, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _require_write_capability(action: str) -> str | None:
+    variable = "NLP2ENV_MCP_ALLOW_WRITE"
+    if _capability_enabled(variable):
+        return None
+    return _err(
+        "MCP write capability is disabled",
+        action=action,
+        required_env=variable,
+        hint=f"Set {variable}=1 before starting the MCP server after reviewing its workspace scope",
+    )
+
+
+def _require_secret_output_capability(action: str) -> str | None:
+    variable = "NLP2ENV_MCP_ALLOW_SECRET_OUTPUT"
+    if _capability_enabled(variable):
+        return None
+    return _err(
+        "MCP secret output capability is disabled",
+        action=action,
+        required_env=variable,
+        hint=f"Set {variable}=1 before starting MCP only in a trusted local session",
+    )
 
 
 def _load(path: str | None = None) -> EnvFile:
@@ -74,6 +101,10 @@ def nlp2env_interfaces() -> str:
             "name": "nlp2env",
             "env_file": str(path),
             "env_file_exists": path.is_file(),
+            "capabilities": {
+                "write": _capability_enabled("NLP2ENV_MCP_ALLOW_WRITE"),
+                "secret_output": _capability_enabled("NLP2ENV_MCP_ALLOW_SECRET_OUTPUT"),
+            },
             "profiles": {
                 "email": {
                     "description": "SMTP mailbox for nlp2dsl-worker / send_email workflows",
@@ -113,6 +144,10 @@ def nlp2env_interfaces() -> str:
                 "NLP2ENV_ENV_FILE": "Path to target .env (default: ./.env or NLP2ENV_PROJECT_DIR/.env)",
                 "NLP2ENV_MASTER_KEY": "Encryption key for encrypt/decrypt operations (or use ~/.nlp2env/key)",
                 "NLP2ENV_PROJECT_DIR": "Project root when NLP2ENV_ENV_FILE unset",
+                "NLP2ENV_MCP_ALLOW_WRITE": "Set to 1 to enable MCP tools that modify .env files",
+                "NLP2ENV_MCP_ALLOW_SECRET_OUTPUT": (
+                    "Set to 1 to allow MCP to return plaintext secrets or newly generated keys"
+                ),
             },
         }
     )
@@ -126,6 +161,10 @@ def nlp2env_list(env_file: str | None = None) -> str:
 
 def nlp2env_get(keys: str, env_file: str | None = None, unmask: bool = False) -> str:
     """Get one or more keys (comma-separated). Secrets masked unless unmask=true."""
+    if unmask:
+        denied = _require_secret_output_capability("nlp2env_get:unmask")
+        if denied:
+            return denied
     env = _load(env_file)
     result: dict[str, str | None] = {}
     for key in [k.strip() for k in keys.split(",") if k.strip()]:
@@ -150,6 +189,9 @@ def _validate_values(values: dict[str, str]) -> list[dict[str, Any]]:
 
 def nlp2env_set(values_json: str, env_file: str | None = None, overwrite: bool = True, validate: bool = True) -> str:
     """Set KEY=value pairs from JSON object, e.g. {"SMTP_HOST":"smtp.gmail.com"}."""
+    denied = _require_write_capability("nlp2env_set")
+    if denied:
+        return denied
     try:
         data = json.loads(values_json)
     except json.JSONDecodeError as exc:
@@ -188,6 +230,9 @@ def nlp2env_set_email(
 
     Prefer password_env=SMTP_PASSWORD (set before MCP start) instead of password in chat.
     """
+    denied = _require_write_capability("nlp2env_set_email")
+    if denied:
+        return denied
     from nlp2env.validators import validate_email, validate_host, validate_port
 
     host_v = validate_host(host, field="SMTP_HOST")
@@ -232,6 +277,9 @@ def nlp2env_set_email(
 
 def nlp2env_apply_text(text: str, env_file: str | None = None) -> str:
     """Apply KEY=value or 'KEY: value' lines from text block to .env."""
+    denied = _require_write_capability("nlp2env_apply_text")
+    if denied:
+        return denied
     env = _load(env_file)
     updates = env.apply_text(text)
     if not updates:
@@ -250,6 +298,9 @@ def nlp2env_apply_text(text: str, env_file: str | None = None) -> str:
 
 def nlp2env_delete(keys: str, env_file: str | None = None) -> str:
     """Delete one or more keys (comma-separated) from .env."""
+    denied = _require_write_capability("nlp2env_delete")
+    if denied:
+        return denied
     env = _load(env_file)
     removed: list[str] = []
     missing: list[str] = []
@@ -271,6 +322,9 @@ def nlp2env_delete(keys: str, env_file: str | None = None) -> str:
 
 def nlp2env_backup(env_file: str | None = None) -> str:
     """Backup current .env before manual edits."""
+    denied = _require_write_capability("nlp2env_backup")
+    if denied:
+        return denied
     env = _load(env_file)
     dest = env.backup()
     if dest is None:
@@ -294,6 +348,9 @@ def nlp2env_set_api(
     env_file: str | None = None,
 ) -> str:
     """Save LLM/API keys to .env. Pass only keys you want to set; empty strings are skipped."""
+    denied = _require_write_capability("nlp2env_set_api")
+    if denied:
+        return denied
     payload = api_profile_from_dict(
         {
             "openai_api_key": openai_api_key or None,
@@ -342,6 +399,9 @@ def nlp2env_set_db(
     env_file: str | None = None,
 ) -> str:
     """Save database connection settings to .env (PostgreSQL, Redis, MongoDB). Empty strings are skipped."""
+    denied = _require_write_capability("nlp2env_set_db")
+    if denied:
+        return denied
     payload = db_profile_from_dict(
         {
             "postgres_host": postgres_host or None,
@@ -414,6 +474,9 @@ def nlp2env_list_files(project_dir: str | None = None) -> str:
 
 def nlp2env_generate_key() -> str:
     """Generate new Fernet encryption key. Save to ~/.nlp2env/key or set NLP2ENV_MASTER_KEY."""
+    denied = _require_secret_output_capability("nlp2env_generate_key")
+    if denied:
+        return denied
     try:
         key = generate_key()
         return _ok({"key": key, "hint": "Save to ~/.nlp2env/key or export NLP2ENV_MASTER_KEY=<key>"})
@@ -432,6 +495,9 @@ def nlp2env_encrypt(plaintext: str) -> str:
 
 def nlp2env_decrypt(ciphertext: str) -> str:
     """Decrypt 'enc:<base64>' value to plaintext."""
+    denied = _require_secret_output_capability("nlp2env_decrypt")
+    if denied:
+        return denied
     try:
         decrypted = decrypt_value(ciphertext)
         return _ok({"decrypted": decrypted})
@@ -447,6 +513,9 @@ def nlp2env_migrate(
     remove_from_source: bool = False,
 ) -> str:
     """Migrate keys from source .env to target .env.{suffix}. keys=comma-separated."""
+    denied = _require_write_capability("nlp2env_migrate")
+    if denied:
+        return denied
     key_list = [k.strip() for k in keys.split(",") if k.strip()]
     if not key_list:
         return _err("No keys specified")

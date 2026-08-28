@@ -29,6 +29,15 @@ export NLP2ENV_ENV_FILE=~/github/wronai/todomat/.env   # opcjonalnie
 nlp2env-mcp
 ```
 
+Serwer startuje w trybie tylko do odczytu i zwraca sekrety wyłącznie w formie
+zamaskowanej. W zaufanej lokalnej sesji można osobno włączyć zapis i jawny
+output sekretów:
+
+```bash
+export NLP2ENV_MCP_ALLOW_WRITE=1
+export NLP2ENV_MCP_ALLOW_SECRET_OUTPUT=1
+```
+
 ## Narzędzia MCP
 
 | Tool | Opis |
@@ -118,7 +127,8 @@ SMTP_PORT=2525
     "nlp2env": {
       "command": "nlp2env-mcp",
       "env": {
-        "NLP2ENV_ENV_FILE": "/home/tom/github/wronai/todomat/.env"
+        "NLP2ENV_ENV_FILE": "/home/tom/github/wronai/todomat/.env",
+        "NLP2ENV_MCP_ALLOW_WRITE": "1"
       }
     }
   }
@@ -165,7 +175,7 @@ nlp2env_encrypt("sekret123")  # → "enc:gAAAAAB..."
 # Zapisz zaszyfrowane do .env
 nlp2env_set('{"API_KEY": "enc:gAAAAAB..."}')
 
-# Odszyfruj (automatycznie przy odczycie przez MCP)
+# Odszyfruj tylko gdy MCP uruchomiono z NLP2ENV_MCP_ALLOW_SECRET_OUTPUT=1
 nlp2env_decrypt("enc:gAAAAAB...")  # → "sekret123"
 ```
 

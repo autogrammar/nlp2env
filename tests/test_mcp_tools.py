@@ -8,6 +8,12 @@ pytest.importorskip("mcp")
 from nlp2env_mcp.server import build_mcp
 
 
+@pytest.fixture(autouse=True)
+def allow_test_capabilities(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("NLP2ENV_MCP_ALLOW_WRITE", "1")
+    monkeypatch.setenv("NLP2ENV_MCP_ALLOW_SECRET_OUTPUT", "1")
+
+
 @pytest.fixture
 def env_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     path = tmp_path / ".env"
@@ -31,6 +37,32 @@ def test_interfaces():
     assert "nlp2env_load_multi" in tools
     assert "nlp2env_list_files" in tools
     assert "nlp2env_migrate" in tools
+
+
+def test_write_tools_are_disabled_without_server_capability(env_path: Path, monkeypatch):
+    monkeypatch.delenv("NLP2ENV_MCP_ALLOW_WRITE")
+    mcp = build_mcp()
+    fn = mcp._tool_manager._tools["nlp2env_delete"].fn  # type: ignore[attr-defined]
+    env_path.write_text("SECRET=value\n", encoding="utf-8")
+
+    out = json.loads(fn(keys="SECRET"))
+
+    assert out["success"] is False
+    assert out["required_env"] == "NLP2ENV_MCP_ALLOW_WRITE"
+    assert env_path.read_text(encoding="utf-8") == "SECRET=value\n"
+
+
+def test_secret_output_is_disabled_without_server_capability(env_path: Path, monkeypatch):
+    monkeypatch.delenv("NLP2ENV_MCP_ALLOW_SECRET_OUTPUT")
+    env_path.write_text("API_SECRET=plain-text\n", encoding="utf-8")
+    mcp = build_mcp()
+    fn = mcp._tool_manager._tools["nlp2env_get"].fn  # type: ignore[attr-defined]
+
+    out = json.loads(fn(keys="API_SECRET", unmask=True))
+
+    assert out["success"] is False
+    assert out["required_env"] == "NLP2ENV_MCP_ALLOW_SECRET_OUTPUT"
+    assert "plain-text" not in json.dumps(out)
 
 
 def test_set_email_via_tool(env_path: Path):
