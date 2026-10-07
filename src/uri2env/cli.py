@@ -10,6 +10,11 @@ from uri2env.materialize import materialize_uri
 
 
 def main(argv: list[str] | None = None) -> int:
+    try:
+        from .autoupdate import check_for_updates
+        check_for_updates("nlp2env")
+    except Exception:
+        pass
     parser = argparse.ArgumentParser(description="Materialize env:// URI to .env")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
