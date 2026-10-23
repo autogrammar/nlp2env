@@ -1,0 +1,75 @@
+{
+  "schema": "new-project.intent/v3",
+  "ticket": "ticket-003",
+  "summary": "Shared lockfile dependency maintenance (uv.lock)",
+  "workstream": "integration",
+  "classification": {
+    "kind": "SERVICE",
+    "priority": "P2",
+    "origin": "health"
+  },
+  "allowedPaths": [
+    "project/ticket-003/**",
+    "TODO.md",
+    "project/TICKETS.md",
+    "uv.lock",
+    "pyproject.toml"
+  ],
+  "forbiddenPaths": [
+    "project/ticket-*/user-*.md"
+  ],
+  "stacks": [],
+  "dependsOn": [],
+  "conflictsWith": [],
+  "integrationTicket": null,
+  "delivery": {
+    "acceptedBaseSha": "2982621832706ff442c2e6129aa5fa80c07e8a53",
+    "targetBranch": "main",
+    "outcome": "Automated shared-lockfile dependency updates carried through the integration workstream.",
+    "nonGoals": [
+      "runtime code changes",
+      "new dependencies beyond the automated bumps"
+    ],
+    "complexity": "L",
+    "estimatedMinutes": 60,
+    "budgets": {
+      "maxImplementationFiles": 15,
+      "maxAffectedComponents": 5,
+      "maxPublicInterfaceChanges": 3,
+      "maxRuntimeDependencies": 3
+    },
+    "architecture": {
+      "status": "accepted",
+      "decision": "No architecture change; lockfile refresh only.",
+      "components": [
+        {
+          "name": "nlp2env",
+          "paths": [
+            "uv.lock"
+          ]
+        }
+      ],
+      "responsibilityChanges": false,
+      "interfaceChanges": [],
+      "dataChanges": [],
+      "ui": {
+        "impact": "none",
+        "states": [],
+        "evidence": []
+      },
+      "rollback": "git revert the bump commit"
+    },
+    "runtimeDependencies": [
+      "costs"
+    ],
+    "validation": [
+      {
+        "criterion": "AC-01",
+        "commands": [
+          "bash project/governance-check.sh --base 2982621832706ff442c2e6129aa5fa80c07e8a53 --changed-file uv.lock"
+        ],
+        "evidence": "governance gate GOV-PASS on the PR diff"
+      }
+    ]
+  }
+}
